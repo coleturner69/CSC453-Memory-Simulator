@@ -94,7 +94,7 @@ def read_bin(bin_name):
 
 
 def main():
-    if (len(sys.argv) < 2 or len(sys.argv > 4)):
+    if (len(sys.argv) < 2 or len(sys.argv) > 4):
         print("Usage: memSim <reference-sequence-file.txt> <FRAMES> <PRA>")
         sys.exit(1)
 
@@ -185,19 +185,15 @@ def main():
                     
                     tlb.add(page_num, physical_frame_num)
 
-        print(f"{address}, {value}, {physical_frame_num}, {page_content}")
+        signed_value = value - 256 if value > 127 else value
+        print(f"{address}, {signed_value}, {physical_frame_num}, \n{page_content.hex().upper()}")
 
     print(f"Number of Translated Addresses = {len(addresses)}")
     print(f"Page Faults = {page_faults}")
-    print(f"Page Fault Rate = {page_faults / len(addresses) * 100}")
+    print(f"Page Fault Rate = {(page_faults / len(addresses)):.3f}")
     print(f"TLB Hits = {tlb_hits}")
     print(f"TLB Misses = {tlb_misses}")
-    print(f"TLB Hit Rate = {tlb_hits / tlb_misses * 100}")
+    print(f"TLB Hit Rate = {(tlb_hits / tlb_misses):.3f}")
 
 if __name__ == "__main__":
     main()
-
-
-
-
-    
