@@ -165,7 +165,6 @@ def main():
         physical_frame_num = tlb.get_frame(page_num)
 
         if (physical_frame_num != None):
-            # print("in tlb")
             # if in TLB, use the frame number for the value
             tlb_hits += 1
             print("-> tlb hit")
@@ -183,14 +182,11 @@ def main():
             frame_tup = page_table.get_frame(page_num)
             if (frame_tup == None):
                 # if not in page table
-                # print("not in page table")
                 page_faults += 1
-                # print("->fault")
 
                 page_content = backing_store[page_num * page_size : (page_num+1) * page_size]
                 is_full = physical_memory.check_full()
                 if (is_full):
-                    # print("in here")
                     # use PRA here
                     remove_page_num = None
                     if pra == "fifo":
@@ -225,7 +221,6 @@ def main():
                 physical_frame_num, loaded = frame_tup
                 if(loaded):
                     # if already loaded into RAM, get value
-                    # print('here')
                     value = physical_memory.frames[physical_frame_num].page_content[offset]
                     page_content = backing_store[page_num * page_size : (page_num+1) * page_size]
 
@@ -234,16 +229,12 @@ def main():
                         lruQueue.remove((page_num, physical_frame_num))
                         lruQueue.append((page_num, physical_frame_num))
                 else:
-                    # print("start")
                     page_faults += 1
-                    # print("->fault")
 
                     page_content = backing_store[page_num * page_size : (page_num+1) * page_size]
                     is_full = physical_memory.check_full()
                     if (is_full):
                         #use PRA here
-                        # print("pra in full")
-                        # physical_frame_num = 0
                         remove_page_num = None
                         if pra == "fifo":
                             # pop from queue
@@ -276,10 +267,7 @@ def main():
                 
 
         signed_value = value - 256 if value > 127 else value
-        print("---->", page_num)
         print(f"{address}, {signed_value}, {physical_frame_num}, \n{page_content.hex().upper()}")
-        print(tlb.buffer)
-        print(lruQueue)
     print(f"Number of Translated Addresses = {len(addresses)}")
     print(f"Page Faults = {page_faults}")
     print(f"Page Fault Rate = {(page_faults / len(addresses)):.3f}")
