@@ -1,4 +1,5 @@
 import sys
+from collections import deque
 
 class TLB: 
     def __init__(self, size=16):
@@ -20,6 +21,15 @@ class TLB:
                 if (tup[0] == page_num):
                     return tup[1]
             return None
+        else:
+            raise ValueError("Invalid page number, must be between 0 and 255")
+        
+    def remove_frame(self, page_num):
+        if (0 <= page_num <= 255):
+            for i, tup in enumerate(self.buffer):
+                if (tup[0] == page_num):
+                    self.buffer.pop(i)
+                    return
         else:
             raise ValueError("Invalid page number, must be between 0 and 255")
 
@@ -82,6 +92,7 @@ class PhysicalMemory:
             if (frame.is_occupied == False):
                 return False
         return True
+
     
 def read_file(filename):
     with open(filename, 'r') as f:
@@ -102,7 +113,7 @@ def main():
     pra = "fifo"
 
     if (len(sys.argv) >= 3):
-        frames = int(sys.argv[3])
+        frames = int(sys.argv[2])
 
         if (frames <= 0 or frames > 256):
             print("FRAMES must be an integer > 0 and <= 256")
@@ -114,7 +125,16 @@ def main():
         if pra not in ["fifo", "lru", "opt"]:
             print("PRA must be either 'fifo', 'lru', or 'opt'")
             sys.exit(1)
-        
+    
+    # initialize resource for page-replacement algorithm
+    if pra == "fifo":
+        fifoQueue = deque()
+    elif pra == "lru":
+        # shitty inefficient queue is used but who cares
+        lruQueue = deque()
+    elif pra == "opt":
+        pass
+
     page_size = 256
     frame_size = 256
 
@@ -143,21 +163,51 @@ def main():
         page_content = 0
 
         physical_frame_num = tlb.get_frame(page_num)
-        if (physical_frame_num != None):
-            tlb_hits += 1
-            value = physical_memory.frames[physical_frame_num].page_content[offset]
-        else:
-            tlb_misses += 1
 
+        if (physical_frame_num != None):
+            # print("in tlb")
+            # if in TLB, use the frame number for the value
+            tlb_hits += 1
+            print("-> tlb hit")
+            value = physical_memory.frames[physical_frame_num].page_content[offset]
+            page_content = backing_store[page_num * page_size : (page_num+1) * page_size]
+
+            # delete from lruQueue and append to the end
+            if pra == "lru":
+                lruQueue.remove((page_num, physical_frame_num))
+                lruQueue.append((page_num, physical_frame_num))
+        else:
+            # if not in TLB, check page table
+            tlb_misses += 1
+            print("+++tlbmiss")
             frame_tup = page_table.get_frame(page_num)
             if (frame_tup == None):
+                # if not in page table
+                # print("not in page table")
                 page_faults += 1
+                # print("->fault")
 
                 page_content = backing_store[page_num * page_size : (page_num+1) * page_size]
                 is_full = physical_memory.check_full()
                 if (is_full):
-                    #use PRA here
-                    physical_frame_num = 0
+                    # print("in here")
+                    # use PRA here
+                    remove_page_num = None
+                    if pra == "fifo":
+                        # pop from queue
+                        remove_page_num, physical_frame_num = fifoQueue.popleft()
+                    elif pra == "lru":
+                        # pop from queue
+                        remove_page_num, physical_frame_num = lruQueue.popleft()
+
+                    # change page_table loaded bit to low
+                    page_table.table[remove_page_num] = (page_table.table[remove_page_num][0], 0)
+
+                    # remove from tlb
+                    tlb.remove_frame(remove_page_num)
+
+                    # add to page_table utilizing PRA's page
+                    physical_memory.frames[physical_frame_num].page_content = page_content
                 else:
                     physical_frame_num = physical_memory.load(page_content)
 
@@ -165,29 +215,71 @@ def main():
                 value = page_content[offset]
                 
                 tlb.add(page_num, physical_frame_num)
+
+                if pra == "fifo":
+                    fifoQueue.append((page_num, physical_frame_num))
+                elif pra == "lru":
+                    lruQueue.append((page_num, physical_frame_num))
             else:
+                # if in page table, but not TLB, insert into TLB
                 physical_frame_num, loaded = frame_tup
                 if(loaded):
+                    # if already loaded into RAM, get value
+                    # print('here')
                     value = physical_memory.frames[physical_frame_num].page_content[offset]
+                    page_content = backing_store[page_num * page_size : (page_num+1) * page_size]
+
+                    # remove from lruQueue and append to the end
+                    if pra == "lru":
+                        lruQueue.remove((page_num, physical_frame_num))
+                        lruQueue.append((page_num, physical_frame_num))
                 else:
+                    # print("start")
                     page_faults += 1
+                    # print("->fault")
 
                     page_content = backing_store[page_num * page_size : (page_num+1) * page_size]
                     is_full = physical_memory.check_full()
                     if (is_full):
                         #use PRA here
-                        physical_frame_num = 0
+                        # print("pra in full")
+                        # physical_frame_num = 0
+                        remove_page_num = None
+                        if pra == "fifo":
+                            # pop from queue
+                            remove_page_num, physical_frame_num = fifoQueue.popleft()
+                        elif pra == "lru":
+                            # pop from queue
+                            remove_page_num, physical_frame_num = lruQueue.popleft() 
+                        # change page_table loaded bit to low
+                        page_table.table[remove_page_num] = (page_table.table[remove_page_num][0], 0)
+
+                        # remove from tlb
+                        tlb.remove_frame(remove_page_num)
+
+                        # add to page_table utilizing PRA's page
+                        physical_memory.frames[physical_frame_num].page_content = page_content
                     else:
                         physical_frame_num = physical_memory.load(page_content)
 
-                    page_table.add(page_num, physical_frame_num, 1)
-                    value = page_content[offset]
-                    
-                    tlb.add(page_num, physical_frame_num)
+                    # in else case bc its not already in LRU, therefore add to LRU but not removed
+                    if pra == "lru": 
+                        lruQueue.append((page_num, physical_frame_num))
+
+                page_table.add(page_num, physical_frame_num, 1)
+                value = page_content[offset]
+                
+                tlb.add(page_num, physical_frame_num)
+
+                if pra == "fifo":
+                    fifoQueue.append((page_num, physical_frame_num))
+                
 
         signed_value = value - 256 if value > 127 else value
+        print("---->", page_num)
         print(f"{address}, {signed_value}, {physical_frame_num}, \n{page_content.hex().upper()}")
-
+        print(tlb.buffer)
+        print(lruQueue)
     print(f"Number of Translated Addresses = {len(addresses)}")
     print(f"Page Faults = {page_faults}")
     print(f"Page Fault Rate = {(page_faults / len(addresses)):.3f}")
