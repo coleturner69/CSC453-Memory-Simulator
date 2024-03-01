@@ -103,6 +103,21 @@ def read_bin(bin_name):
     with open(bin_name, 'rb') as b:
         return b.read()
 
+def optPRA(remaining, page_table):
+    # check if there is a page never used again, replace with such
+    for page_num in range(len(page_table.table)):
+        if page_table.table[page_num] != None and page_num not in remaining:
+            return page_num
+
+    # traverse through page_table and find the page that will be used the farthest in the future
+    max_index = 0
+    visited = set()
+    for i, page_num in enumerate(remaining):
+        if page_num not in visited:
+            visited.add(page_num)
+            max_index = max(max_index, i)
+    # print(f"optimal page: {remaining[max_index]}")
+    return remaining[max_index]
 
 def main():
     if (len(sys.argv) < 2 or len(sys.argv) > 4):
@@ -132,8 +147,7 @@ def main():
     elif pra == "lru":
         # shitty inefficient queue is used but who cares
         lruQueue = deque()
-    elif pra == "opt":
-        pass
+    
 
     page_size = 256
     frame_size = 256
@@ -153,11 +167,12 @@ def main():
     tlb_hits = 0
     tlb_misses = 0
 
-    for address in addresses:
+    for aIndex, address in enumerate(addresses):
         page_num = address // page_size
         offset = address % page_size
+        remaining = [(address//page_size) for address in addresses[aIndex + 1:]]
+        # print(f"Virtual address {address} at index {aIndex} -> {remaining}")
 
-        #not implemented
         value = 0
         physical_frame_num = 0
         page_content = 0
@@ -167,7 +182,6 @@ def main():
         if (physical_frame_num != None):
             # if in TLB, use the frame number for the value
             tlb_hits += 1
-            print("-> tlb hit")
             value = physical_memory.frames[physical_frame_num].page_content[offset]
             page_content = backing_store[page_num * page_size : (page_num+1) * page_size]
 
@@ -178,7 +192,6 @@ def main():
         else:
             # if not in TLB, check page table
             tlb_misses += 1
-            print("+++tlbmiss")
             frame_tup = page_table.get_frame(page_num)
             if (frame_tup == None):
                 # if not in page table
@@ -195,6 +208,10 @@ def main():
                     elif pra == "lru":
                         # pop from queue
                         remove_page_num, physical_frame_num = lruQueue.popleft()
+                    else:
+                        # optimal
+                        optPageNum = optPRA(remaining, page_table)
+                        remove_page_num, physical_frame_num = optPageNum, page_table.table[optPageNum][0]
 
                     # change page_table loaded bit to low
                     page_table.table[remove_page_num] = (page_table.table[remove_page_num][0], 0)
@@ -242,6 +259,10 @@ def main():
                         elif pra == "lru":
                             # pop from queue
                             remove_page_num, physical_frame_num = lruQueue.popleft() 
+                        else:
+                            # optimal
+                            optPageNum = optPRA(remaining, page_table)
+                            remove_page_num, physical_frame_num = page_table.get_frame(optPageNum)
                         # change page_table loaded bit to low
                         page_table.table[remove_page_num] = (page_table.table[remove_page_num][0], 0)
 
